@@ -2,7 +2,7 @@
 # TopoSurface-DTI base configuration
 
 # ── Data ──────────────────────────────────────────────────────────────────
-data_dir:        /kaggle/input/datasets/madukacharles/pdbbind-protein-ligand-binding-affinity-datasetT    # path to PDBBind dataset
+data_dir:        /kaggle/working/Data    # path to PDBBind dataset
 use_synthetic:   true            # true = synthetic data (no real data needed)
 n_train:         200
 n_val:           40
