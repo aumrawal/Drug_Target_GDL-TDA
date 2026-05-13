@@ -88,7 +88,7 @@ def extract_pocket_atoms(
             from rdkit import Chem, RDLogger
         except ImportError:
             raise ImportError("Install RDKit: pip install rdkit-pypi")
-        RDLogger.DisableLog('rdApp.warning')
+        RDLogger.DisableLog('rdApp.*')
         mol = Chem.SDMolSupplier(sdf_path, removeHs=True)[0]
         if mol is None:
             mol = Chem.SDMolSupplier(sdf_path, removeHs=True, sanitize=False)[0]
@@ -96,8 +96,13 @@ def extract_pocket_atoms(
                 try:
                     Chem.SanitizeMol(mol)
                 except Exception:
-                    pass
-        RDLogger.EnableLog('rdApp.warning')
+                    # Skip valence checks; ring/aromaticity info still valid
+                    Chem.SanitizeMol(
+                        mol,
+                        Chem.SanitizeFlags.SANITIZE_ALL
+                        ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES,
+                    )
+        RDLogger.EnableLog('rdApp.*')
         if mol is None:
             raise ValueError(f"Could not parse ligand SDF: {sdf_path}")
         conf = mol.GetConformer()
