@@ -134,9 +134,22 @@ class DTIDataset(Dataset):
 
         # ── Drug ──
         try:
-            from rdkit import Chem
+            from rdkit import Chem, RDLogger
+            # Suppress the benign "tagged as 2D but has 3D coords" warning
+            RDLogger.DisableLog('rdApp.warning')
             sdf = os.path.join(self.data_dir, pdb_id, f'{pdb_id}_ligand.sdf')
             mol = Chem.SDMolSupplier(sdf, removeHs=True)[0]
+            if mol is None:
+                # Fallback: skip sanitization (handles valence-error molecules)
+                mol = Chem.SDMolSupplier(sdf, removeHs=True, sanitize=False)[0]
+                if mol is not None:
+                    try:
+                        Chem.SanitizeMol(mol)
+                    except Exception:
+                        pass
+            RDLogger.EnableLog('rdApp.warning')
+            if mol is None:
+                raise ValueError(f"RDKit could not parse SDF: {sdf}")
             drug = mol_to_graph(mol)
         except Exception as e:
             print(f"[warn] Drug load failed for {pdb_id}: {e}. Using synthetic.")

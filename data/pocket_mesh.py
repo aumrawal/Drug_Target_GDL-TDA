@@ -85,10 +85,19 @@ def extract_pocket_atoms(
                 f"ligand SDF file for pocket centring."
             )
         try:
-            from rdkit import Chem
+            from rdkit import Chem, RDLogger
         except ImportError:
             raise ImportError("Install RDKit: pip install rdkit-pypi")
+        RDLogger.DisableLog('rdApp.warning')
         mol = Chem.SDMolSupplier(sdf_path, removeHs=True)[0]
+        if mol is None:
+            mol = Chem.SDMolSupplier(sdf_path, removeHs=True, sanitize=False)[0]
+            if mol is not None:
+                try:
+                    Chem.SanitizeMol(mol)
+                except Exception:
+                    pass
+        RDLogger.EnableLog('rdApp.warning')
         if mol is None:
             raise ValueError(f"Could not parse ligand SDF: {sdf_path}")
         conf = mol.GetConformer()
