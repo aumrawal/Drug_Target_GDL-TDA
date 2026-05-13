@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TopoSurface-DTI — Persistent homology primer for a mathematical physicist</title>
+<style>
+  :root {
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f7f6f2;
+    --color-background-tertiary: #efece4;
+    --color-background-info: #E6F1FB;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #5f5e5a;
+    --color-text-tertiary: #888780;
+    --color-text-info: #0C447C;
+    --color-border-tertiary: rgba(0,0,0,0.15);
+    --color-border-secondary: rgba(0,0,0,0.3);
+    --color-border-info: #185FA5;
+    --color-accent: #C2410C;
+    --color-accent-soft: rgba(194, 65, 12, 0.15);
+    --color-h0: #185FA5;
+    --color-h1: #C2410C;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-background-primary: #1a1a1a;
+      --color-background-secondary: #242422;
+      --color-background-tertiary: #2c2c2a;
+      --color-background-info: #042C53;
+      --color-text-primary: #f1efe8;
+      --color-text-secondary: #b4b2a9;
+      --color-text-tertiary: #888780;
+      --color-text-info: #B5D4F4;
+      --color-border-tertiary: rgba(255,255,255,0.15);
+      --color-border-secondary: rgba(255,255,255,0.3);
+      --color-accent: #FB923C;
+      --color-h0: #6BAEFF;
+      --color-h1: #FB923C;
+    }
+  }
+  body { font-family: var(--font-sans); background: var(--color-background-tertiary); color: var(--color-text-primary); margin: 0; padding: 2rem 1rem; line-height: 1.7; }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 500; margin: 0 0 0.4rem; }
+  h2 { font-size: 20px; font-weight: 500; margin: 2.4rem 0 0.6rem; }
+  h3 { font-size: 16px; font-weight: 500; margin: 1.4rem 0 0.4rem; }
+  p, ul { font-size: 15px; }
+  code { background: var(--color-background-secondary); padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 13px; }
+  pre { background: var(--color-background-secondary); padding: 12px 14px; border-radius: var(--border-radius-md); font-family: var(--font-mono); font-size: 12.5px; overflow-x: auto; line-height: 1.55; }
+  .meta { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 2rem; }
+  .widget { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin: 1rem 0 2rem; }
+  .row { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start; }
+  .col { flex: 1; min-width: 240px; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .btn { padding: 6px 12px; font-size: 13px; border: 0.5px solid var(--color-border-secondary); background: transparent; color: inherit; border-radius: var(--border-radius-md); cursor: pointer; font-family: inherit; }
+  .btn.active { background: var(--color-background-info); color: var(--color-text-info); border-color: var(--color-border-info); }
+  .btn:hover { background: var(--color-background-secondary); }
+  .btn.active:hover { background: var(--color-background-info); }
+  label { font-size: 13px; color: var(--color-text-secondary); display: flex; align-items: center; gap: 8px; }
+  input[type=range] { -webkit-appearance: none; height: 4px; background: var(--color-border-tertiary); border-radius: 2px; flex: 1; max-width: 240px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--color-text-info); border-radius: 50%; cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; background: var(--color-text-info); border-radius: 50%; cursor: pointer; border: none; }
+  select { font-family: inherit; font-size: 13px; padding: 4px 8px; border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: inherit; border-radius: var(--border-radius-md); }
+  .num { font-family: var(--font-mono); font-size: 13px; color: var(--color-text-primary); min-width: 56px; display: inline-block; text-align: right; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--color-text-secondary); margin-top: 8px; flex-wrap: wrap; }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .info { background: var(--color-background-info); color: var(--color-text-info); border-left: 3px solid var(--color-border-info); padding: 10px 14px; border-radius: 4px; font-size: 14px; margin: 1rem 0; }
+  .eq { font-family: var(--font-mono); font-size: 14px; background: var(--color-background-secondary); padding: 10px 14px; border-radius: var(--border-radius-md); margin: 0.6rem 0; }
+  table { border-collapse: collapse; font-size: 13px; }
+  td { padding: 4px 8px; border: 0.5px solid var(--color-border-tertiary); text-align: center; font-family: var(--font-mono); }
+  th { padding: 4px 8px; font-weight: 500; color: var(--color-text-secondary); text-align: center; font-family: var(--font-mono); font-size: 12px; }
+  .pivot { background: var(--color-accent-soft); color: var(--color-accent); font-weight: 600; }
+  .killed { color: var(--color-text-tertiary); text-decoration: line-through; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>TopoSurface-DTI — Persistent homology primer</h1>
+<p class="meta">For a mathematical physicist with expertise in algebraic topology. Conversation saved 2026-05-12. Focus: the Vietoris–Rips filtration, the exact algorithm Ripser runs (apparent pairs + clearing lemma + cohomology duality), and persistence-image vectorisation. Maps to <code>data/tda_features.py</code>.</p>
+
+<p>You already know simplicial homology and boundary operators, so I will skip what is standard and concentrate on what is specific to the model: which filtration is being computed, what Ripser is doing under the hood that makes it 100&ndash;1000× faster than a textbook implementation, and how the diagram becomes a fixed-length feature vector that the rest of the network can ingest.</p>
+
+<h2>0. Setup — from molecular point cloud to a chain complex</h2>
+
+<p>The TDA branch sees one object per pass: a point cloud <span class="eq" style="display:inline-block;padding:2px 8px;">X = {x₁, …, x_N} ⊂ ℝ³</span>. For the drug this is the set of heavy atoms (≈ 10&ndash;60 points); for the pocket this is the set of Cα residue positions (≈ 30&ndash;200 points). The point cloud is unordered and we want a feature that depends on it only as a multiset in ℝ³ modulo SE(3) — i.e. permutation- and rigid-motion-invariant. Pairwise Euclidean distances are exactly the invariants of this action, so we build everything from the distance matrix:</p>
+
+<div class="eq">D ∈ ℝ^{N×N}, &nbsp; D_{ij} = ‖xᵢ − xⱼ‖₂</div>
+
+<p>From <span style="font-family:var(--font-mono);">D</span> alone the model recovers H₀ and H₁ of a filtered simplicial complex. Two intermediate facts you'll want in mind:</p>
+<ul>
+  <li>We work with <strong>F₂ = GF(2)</strong> coefficients throughout. The structure theorem for finitely generated modules over <span style="font-family:var(--font-mono);">F₂[t]</span>-with-grading still gives an interval decomposition; we just lose the torsion information we never used. Software (Ripser) standardises on F₂.</li>
+  <li>We only need H₀ and H₁. H₂ classes would require building 3-simplices, which Ripser will do if you ask but doubles the work. The code passes <code>maxdim=1</code>.</li>
+</ul>
+
+<h2>1. The Vietoris–Rips filtration</h2>
+
+<p>For ε ≥ 0 define</p>
+
+<div class="eq">VR_ε(X) = { σ ⊆ X : diam(σ) ≤ ε }.</div>
+
+<p>This is the maximal flag complex whose 1-skeleton is the ε-neighbourhood graph of X. ε ≤ ε' gives an inclusion VR_ε ↪ VR_{ε'}, hence a persistence module {Hₖ(VR_ε; F₂)} over the poset (ℝ≥0, ≤). The structure theorem decomposes it as a direct sum of interval modules; the multiset of intervals is the <em>persistence diagram</em> dgmₖ(X).</p>
+
+<p>Two characteristic features show up in molecular point clouds:</p>
+<ul>
+  <li><strong>H₀ classes</strong> all share birth 0 (every vertex is born at ε=0). Their deaths are the edge lengths in a minimum spanning tree of the complete graph on X. The longest-lived H₀ class is essential.</li>
+  <li><strong>H₁ classes</strong> are born when a cycle of edges closes up without yet having a filling triangle, and die when the disk fills in. A binding pocket appears here: a curved arc of pocket-rim residues forms a 1-cycle at moderate ε before the pocket interior fills in at larger ε.</li>
+</ul>
+
+<p>Slide ε and watch this in real time. The point cloud is a noisy annulus + outliers (12 points), so there is one prominent H₁ class plus several H₀ classes. The persistence diagram on the right tracks features that are alive (filled) vs. dead (open):</p>
+
+<div class="widget" id="vr-widget">
+  <div class="controls">
+    <label>ε &nbsp; <input id="vr-eps" type="range" min="0" max="100" value="22" step="1"></label>
+    <span class="num" id="vr-eps-val">2.20</span>
+    <button class="btn" id="vr-resample">resample cloud</button>
+  </div>
+  <div class="row">
+    <div class="col" style="flex: 0 0 320px;">
+      <svg id="vr-svg" viewBox="0 0 320 280" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:var(--color-background-secondary);border-radius:var(--border-radius-md);"></svg>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:var(--color-text-primary);"></span>vertex</span>
+        <span><span class="legend-dot" style="background:var(--color-h1);opacity:0.45;"></span>edge (d ≤ ε)</span>
+        <span><span class="legend-dot" style="background:var(--color-h1);opacity:0.18;"></span>triangle (diam ≤ ε)</span>
+      </div>
+    </div>
+    <div class="col" style="flex: 0 0 320px;">
+      <svg id="vr-pd" viewBox="0 0 320 280" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:var(--color-background-secondary);border-radius:var(--border-radius-md);"></svg>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:var(--color-h0);"></span>H₀ pair</span>
+        <span><span class="legend-dot" style="background:var(--color-h1);"></span>H₁ pair</span>
+        <span style="color:var(--color-text-tertiary);">filled = currently alive at ε</span>
+      </div>
+      <div style="margin-top:10px;font-size:13px;color:var(--color-text-secondary);">β₀(ε) = <span id="vr-b0" class="num"></span> &nbsp; β₁(ε) = <span id="vr-b1" class="num"></span></div>
+    </div>
+  </div>
+</div>
+
+<p>Things to notice as you sweep ε:</p>
+<ul>
+  <li>β₀ starts at 12 (one component per vertex) and decreases monotonically by 1 every time an edge merges two components. The set of edge lengths killing H₀ classes is exactly the MST edge set; this is Kruskal in disguise.</li>
+  <li>β₁ pops up when a non-bounding 1-cycle appears and disappears when a triangulation fills it in. For the noisy annulus there is typically one long-lived H₁ class corresponding to the hole, plus possibly a handful of short bars from local triangulation order.</li>
+  <li>"Long bars" (high persistence p = d − b) are the topologically robust features; "short bars" near the diagonal are noise. Persistence is exactly the multi-scale signal-to-noise filter we want.</li>
+</ul>
+
+<h2>2. The persistent (co)chain complex</h2>
+
+<p>Order the simplices σ₁, σ₂, …, σ_M by filtration value (entry time), breaking ties by dimension then by index. Form the boundary matrix</p>
+
+<div class="eq">D ∈ F₂^{M×M},  D_{ij} = [σᵢ is a codim-1 face of σⱼ].</div>
+
+<p>Column j of D is the cycle ∂σⱼ ∈ Cₖ₋₁ written in the basis {σ_i : dim σᵢ = k−1}. The standard <em>reduction</em> brings D into a form where each non-zero column has a distinct lowest non-zero entry (the "low" or pivot), via column additions over F₂:</p>
+
+<div class="eq">R = D · V, &nbsp; V upper-triangular invertible,&nbsp; low(R_j) distinct across non-zero columns.</div>
+
+<p>The pairing rule (Edelsbrunner–Letscher–Zomorodian 2002): for each non-zero column j of R with pivot i = low(R_j),</p>
+
+<div class="eq">σᵢ is the birth, σⱼ is the death of a persistence pair. <br>Each unpaired non-zero column / non-pivot row gives an essential (infinite) bar.</div>
+
+<p>The from-scratch fallback in <code>_compute_tda_scratch</code> implements exactly this: a dense GF(2) boundary matrix and the lowest-1 elimination. Here it is on a deliberately tiny complex (5 points, all pairwise edges, all triangles below the threshold). The orange cell is the current pivot; struck-through entries have been killed by a column addition:</p>
+
+<div class="widget" id="red-widget">
+  <div class="controls">
+    <button class="btn" id="red-prev">◀ step</button>
+    <button class="btn" id="red-next">step ▶</button>
+    <button class="btn" id="red-reset">reset</button>
+    <span style="font-size:13px;color:var(--color-text-secondary);">step <span class="num" id="red-step"></span> / <span class="num" id="red-total"></span></span>
+  </div>
+  <div class="row">
+    <div class="col" style="flex: 0 0 260px;">
+      <svg id="red-cx" viewBox="0 0 260 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:var(--color-background-secondary);border-radius:var(--border-radius-md);"></svg>
+      <div id="red-narr" style="font-size:13px;color:var(--color-text-secondary);margin-top:10px;line-height:1.5;"></div>
+    </div>
+    <div class="col" style="flex: 1; overflow-x: auto;">
+      <div id="red-mat" style="font-size:11px;"></div>
+      <div id="red-pairs" style="margin-top:10px;font-size:13px;font-family:var(--font-mono);"></div>
+    </div>
+  </div>
+</div>
+
+<p>The algorithm is correct, but its cost is the killer. The naive reduction is O(M³) over F₂, where M is the simplex count. For a pocket with 100 residues the 2-skeleton has &sim;10⁵ triangles — pure Python ≈ minutes per pocket. The Ripser core is the same algorithm but engineered to (i) never materialise most of D, (ii) skip most of the columns, and (iii) work on a sparser dual matrix.</p>
+
+<h2>3. What Ripser actually does</h2>
+
+<p>Three orthogonal tricks, all due to Bauer (Ripser: efficient computation of Vietoris–Rips persistence barcodes, 2021). They compose multiplicatively:</p>
+
+<h3>3a. Cohomology duality — work on coboundaries</h3>
+
+<p>For any filtered simplicial complex, persistent homology and persistent cohomology have <em>identical</em> barcodes (de Silva, Morozov, Vejdemo-Johansson 2011):</p>
+
+<div class="eq">dgmₖ(H_*(VR_ε(X))) = dgmₖ(H^*(VR_ε(X))).</div>
+
+<p>So you may instead reduce the <em>coboundary</em> matrix δ. The win is concrete: the coboundary matrix of a Vietoris–Rips complex is dramatically sparser than the boundary matrix, because a (k−1)-simplex has only a handful of cofacets in the complex but a k-simplex has k+1 facets and many of them. For VR specifically, the asymmetry can be orders of magnitude.</p>
+
+<p>Concretely, Ripser enumerates simplices in <em>reverse</em> filtration order and reduces δ instead of D. The persistence pairs come out the same.</p>
+
+<h3>3b. The clearing lemma — skip zero columns</h3>
+
+<p>Bauer–Kerber–Reininghaus observation (2014): if simplex τ of dimension k+1 was paired with σ of dimension k during the dimension-(k+1) reduction, then when we move down to the dimension-k reduction, σ corresponds to a column that <em>must</em> reduce to zero. So in cohomology order (top-down), once a column has been "killed" at the higher dimension, we know in advance it contributes nothing at the lower dimension.</p>
+
+<div class="eq">paired in dim k+1 &nbsp;⇒&nbsp; zero column in dim k &nbsp;⇒&nbsp; skip.</div>
+
+<p>For a typical Vietoris–Rips filtration up through H₁, this removes the vast majority of the 1-simplex columns from the H₀ pass — they have already been resolved while reducing the 2-simplex columns above them.</p>
+
+<h3>3c. Apparent pairs — most pairs are free</h3>
+
+<p>A <em>zero apparent pair</em> in a simplexwise filtration is a pair (σ, τ) where:</p>
+
+<div class="eq">τ is the lexicographically-smallest cofacet of σ with filtration value equal to σ's,<br>and σ is the lexicographically-largest facet of τ with that same filtration value.</div>
+
+<p>Bauer proved that any such (σ, τ) is a persistence pair of the reduction <em>before</em> running it. You can detect apparent pairs by a local check on each simplex — no global elimination required. In practice, &gt; 95 % of all persistence pairs of a VR filtration are apparent. So Ripser:</p>
+
+<ol>
+  <li>Enumerates simplices in coboundary order.</li>
+  <li>For each, runs the local apparent-pair test in O(k) per simplex — and if it succeeds, emits the pair without touching the matrix.</li>
+  <li>Only the remaining simplices (the <em>essential</em> tail) need real reduction, which now runs on a tiny coboundary submatrix.</li>
+</ol>
+
+<p>Here is the three-trick budget on a representative pocket complex (≈100 points → ≈4950 edges → ≈ many thousands of 2-simplices). Hover the bars to see what each trick removes:</p>
+
+<div class="widget" id="bud-widget">
+  <div class="controls">
+    <span style="font-size:13px;color:var(--color-text-secondary);">click a stage to highlight it</span>
+  </div>
+  <svg id="bud-svg" viewBox="0 0 720 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;"></svg>
+  <div id="bud-info" style="margin-top:10px;font-size:13px;line-height:1.6;"></div>
+</div>
+
+<p>The composite effect: a textbook O(M³) reduction becomes effectively O(M · α(M)) over the apparent-pair fraction plus a small dense residual. For molecular sizes this is the difference between seconds and tens of milliseconds per cloud — which matters because TDA features are recomputed for every datapoint at training time.</p>
+
+<h2>4. Persistence diagrams → fixed-length feature vectors</h2>
+
+<p>A persistence diagram dgm = {(bᵢ, dᵢ)}ᵢ is a multiset, not a vector, and neural networks want vectors. There is a wishlist for any vectorisation:</p>
+
+<ol>
+  <li><strong>Stable</strong>: small bottleneck-distance perturbations of dgm ⇒ small perturbations of the vector.</li>
+  <li><strong>Differentiable</strong>: smooth in (bᵢ, dᵢ).</li>
+  <li><strong>Fixed-length</strong>: independent of |dgm|.</li>
+  <li><strong>Linear</strong>: dgm ↦ vector is linear in the diagram (so superposition of independent regions composes additively).</li>
+</ol>
+
+<p>Persistence images (Adams et al. 2017) satisfy all four. The recipe:</p>
+
+<ol>
+  <li>Transform to (birth, persistence) coordinates: T(b, d) = (b, d − b). This sends the diagonal {b = d} to the axis {p = 0}, which is exactly where noise concentrates — important for the weighting in step 3.</li>
+  <li>Place a 2D Gaussian of variance σ²I at each transformed point.</li>
+  <li>Weight each Gaussian by w(p) — the codebase uses w(p) = p, so noise near the diagonal gets crushed.</li>
+  <li>Evaluate the sum on a uniform <span style="font-family:var(--font-mono);">resolution × resolution</span> grid over [0, max_val]² and flatten.</li>
+</ol>
+
+<div class="eq">ρ_dgm(b, p) = Σᵢ w(pᵢ) · 𝒩((b, p); (bᵢ, pᵢ), σ² I).</div>
+
+<p>This is exactly the loop in <code>persistence_image()</code> (lines 71–76 of <code>data/tda_features.py</code>):</p>
+<pre>for b, p in zip(births, persists):
+    if p &lt; 1e-8: continue
+    gauss_b = np.exp(-((gb - b) ** 2) / (2 * sigma ** 2))
+    gauss_p = np.exp(-((gp - p) ** 2) / (2 * sigma ** 2))
+    image  += p * np.outer(gauss_b, gauss_p)
+</pre>
+
+<p>The outer-product trick exploits the fact that an isotropic 2D Gaussian factors into a product of 1D Gaussians on each axis — turns the kernel evaluation from O(resolution²) into O(resolution) per point. The final image is normalised to [0, 1].</p>
+
+<p>Drag the parameters to see how σ shapes the smoothness/blurriness trade-off and how the weight choice changes which features dominate:</p>
+
+<div class="widget" id="pi-widget">
+  <div class="controls">
+    <label>σ &nbsp; <input id="pi-sigma" type="range" min="2" max="30" value="10" step="1"></label>
+    <span class="num" id="pi-sigma-val">0.50</span>
+    <label>weight &nbsp;
+      <select id="pi-weight">
+        <option value="p">w(p) = p (codebase)</option>
+        <option value="p2">w(p) = p²</option>
+        <option value="one">w(p) = 1 (uniform)</option>
+        <option value="arctan">w(p) = arctan(p)</option>
+      </select>
+    </label>
+    <label>resolution &nbsp;
+      <select id="pi-res">
+        <option value="20" selected>20 (codebase)</option>
+        <option value="40">40</option>
+        <option value="60">60</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <div class="col" style="flex: 0 0 280px;">
+      <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;">persistence diagram (birth × persistence)</div>
+      <svg id="pi-dgm" viewBox="0 0 280 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:var(--color-background-secondary);border-radius:var(--border-radius-md);"></svg>
+    </div>
+    <div class="col" style="flex: 0 0 280px;">
+      <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;">persistence image</div>
+      <canvas id="pi-img" width="280" height="240" style="width:100%;height:auto;background:var(--color-background-secondary);border-radius:var(--border-radius-md);image-rendering:pixelated;"></canvas>
+      <div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary);">flat vector: <span class="num" id="pi-dim"></span> dimensions per diagram</div>
+    </div>
+  </div>
+</div>
+
+<p>Two things worth flagging:</p>
+<ul>
+  <li>The codebase concatenates H₀ and H₁ images into a single 2 · 20² = 800-dim vector per molecule (<code>tda_to_tensor</code>). The drug and pocket each emit one such 800-dim vector, so the fusion module sees a 1600-dim TDA feature alongside the GEM-CNN and DrugEncoder embeddings.</li>
+  <li>The choice σ = max_val / resolution × 2 (line 65 of the code) is &asymp; 2× the grid spacing — a Nyquist-ish smoothing that suppresses high-frequency artefacts of grid sampling without washing out structure. Persistence images are stable in 1-Wasserstein distance with constant linear in σ⁻¹; widening σ trades discrimination for noise robustness.</li>
+</ul>
+
+<h2>5. How this maps to TopoSurface-DTI</h2>
+
+<p>The signature of <code>compute_tda_features</code> is</p>
+
+<pre>compute_tda_features(points: (N,3),  max_edge_len: float = 8.0,  resolution: int = 20) -> dict</pre>
+
+<p>and it is invoked twice per training sample in <code>dataset.py</code>: once on the drug atom coordinates (<code>max_edge_len=8 Å</code>) and once on the pocket Cα coordinates (<code>max_edge_len=16 Å</code>, twice the drug). Why those values?</p>
+
+<ul>
+  <li>Drug max ε = 8 Å covers any ring (benzene diameter ≈ 2.8 Å), any local pharmacophore arrangement, and bridging conformations of small heterocycles. Anything beyond is essentially the molecule's global span, which adds little.</li>
+  <li>Pocket max ε = 16 Å is roughly the diameter of a binding pocket. The H₁ class corresponding to a closed pocket rim appears between ε ≈ 6 Å (consecutive Cα&ndash;Cα within a strand) and ε ≈ 12 Å (cross-pocket span). Going much further would start including non-pocket residues into spurious cycles.</li>
+</ul>
+
+<p>The dict returned contains four entries:</p>
+
+<div class="eq">{ 'h0_image': (400,) float32,  'h1_image': (400,) float32,  'h0_pairs': [(b,d)...],  'h1_pairs': [(b,d)...] }</div>
+
+<p>The two images get concatenated by <code>tda_to_tensor</code> into the 800-dim feature used at train time. The raw pair lists are kept for diagnostics and visualisation only.</p>
+
+<p>One last thing: the SE(3)- and permutation-invariance of the whole pipeline is now manifest. Distances are isometry invariants of ℝ³, the simplicial complex depends only on diam(σ), the persistence module depends only on the filtered complex, the diagram is a function of the persistence module, and the persistence image is a function of the diagram. So</p>
+
+<div class="eq">π : X ↦ image(dgm(VR(X))) &nbsp; is invariant under SE(3) × S_N acting on X.</div>
+
+<p>This is the reason the TDA branch is paired with the GEM-CNN: GEM-CNN gives <em>locally</em> gauge-equivariant features that resolve pocket shape on the surface, and TDA gives <em>globally</em> rigid-motion-invariant features that capture multi-scale topology of the same point cloud. The two are complementary descriptors and the fusion MLP gets to learn the right linear combination.</p>
+
+<h2>Code map</h2>
+
+<table style="width:100%;text-align:left;font-family:inherit;">
+<tr><th style="text-align:left;">data/tda_features.py</th><th style="text-align:left;">role</th></tr>
+<tr><td><code>persistence_image()</code> (l. 41)</td><td>Equation in §4. Shared between Ripser and scratch backends.</td></tr>
+<tr><td><code>_diagram_to_pairs()</code> (l. 84)</td><td>Coerces Ripser's ∞ deaths to <code>max_val · 1.5</code> for grid use.</td></tr>
+<tr><td><code>_compute_tda_ripser()</code> (l. 102)</td><td>Primary path. <code>thresh=max_edge_len</code> truncates the filtration. Ripser does §1–3 internally in C++.</td></tr>
+<tr><td><code>_compute_tda_scratch()</code> (l. 132)</td><td>Fallback. Builds dense F₂ boundary matrices for H₀ and H₁ and reduces via lowest-1 pivot (= §2 verbatim). Subsamples to ≤ 200 points to stay tractable.</td></tr>
+<tr><td><code>compute_tda_features()</code> (l. 243)</td><td>Public entry. Picks backend based on availability of <code>ripser</code> module.</td></tr>
+<tr><td><code>tda_to_tensor()</code> (l. 276)</td><td>Concatenates H₀ and H₁ images into a single torch tensor for the fusion module.</td></tr>
+</table>
+
+<p style="margin-top:2rem;font-size:13px;color:var(--color-text-secondary);">Next instalment available on request: the gauge-theoretic side — SO(2) irrep decomposition of the feature spaces, the kernel constraint K(θ−g) = ρ_out(−g) K(θ) ρ_in(g), the angular-function basis that solves it (de Haan et al. 2020 Table 1), parallel transport g_{q→p} along edges, and how all of that becomes <code>models/irreps.py</code> + <code>models/gem_conv.py</code>.</p>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────────────────
+// Widget 1 — Vietoris–Rips filtration with live persistence diagram
+// ────────────────────────────────────────────────────────────────────────
+(function(){
+  const svg = document.getElementById('vr-svg');
+  const pdSvg = document.getElementById('vr-pd');
+  const epsEl = document.getElementById('vr-eps');
+  const epsVal = document.getElementById('vr-eps-val');
+  const b0El = document.getElementById('vr-b0');
+  const b1El = document.getElementById('vr-b1');
+  const resampleBtn = document.getElementById('vr-resample');
+  const W = 320, H = 280, pad = 30;
+
+  let pts = [];
+  let edges = [];       // {i,j,d}
+  let triangles = [];   // {a,b,c,d}
+  let h0Pairs = [];     // {birth, death}
+  let h1Pairs = [];
+  let maxD = 1;
+
+  function sampleAnnulus(seed) {
+    // 12 points: 9 on a noisy annulus + 3 outliers
+    let rng = mulberry32(seed);
+    const cx = 160, cy = 140;
+    const arr = [];
+    for (let k = 0; k < 9; k++) {
+      const theta = (k / 9) * 2 * Math.PI + rng() * 0.18;
+      const r = 70 + (rng() - 0.5) * 18;
+      arr.push([cx + r * Math.cos(theta), cy + r * Math.sin(theta)]);
+    }
+    // outliers
+    arr.push([cx + 110 + rng() * 10, cy - 70 + rng() * 10]);
+    arr.push([cx - 100 + rng() * 10, cy + 60 + rng() * 10]);
+    arr.push([cx + 12 + rng() * 10, cy + 18 + rng() * 10]); // center fill
+    return arr;
+  }
+  function mulberry32(a) {
+    return function() {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = a;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function dist(p, q) { return Math.hypot(p[0]-q[0], p[1]-q[1]); }
+
+  function buildComplexAndPersistence() {
+    const N = pts.length;
+    edges = [];
+    for (let i = 0; i < N; i++)
+      for (let j = i+1; j < N; j++)
+        edges.push({i, j, d: dist(pts[i], pts[j])});
+    edges.sort((a,b) => a.d - b.d);
+    maxD = edges[edges.length-1].d;
+
+    // Triangles: all (i,j,k) ordered, filtration = max edge
+    triangles = [];
+    for (let i = 0; i < N; i++)
+      for (let j = i+1; j < N; j++)
+        for (let k = j+1; k < N; k++) {
+          const dij = dist(pts[i], pts[j]);
+          const dik = dist(pts[i], pts[k]);
+          const djk = dist(pts[j], pts[k]);
+          triangles.push({a:i, b:j, c:k, d: Math.max(dij, dik, djk)});
+        }
+    triangles.sort((a,b) => a.d - b.d);
+
+    // H0 via union-find on edges in order
+    const parent = Array.from({length: N}, (_, i) => i);
+    function find(x) { while(parent[x] !== x){ parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+    h0Pairs = [];
+    for (const e of edges) {
+      const ri = find(e.i), rj = find(e.j);
+      if (ri !== rj) {
+        parent[ri] = rj;
+        h0Pairs.push({birth: 0, death: e.d});
+      }
+    }
+    // One essential H0 class
+    h0Pairs.push({birth: 0, death: Infinity});
+
+    // H1 via boundary matrix reduction over F2.
+    // Columns = triangles in filtration order. Each column = symmetric-difference set of its 3 edge indices.
+    const edgeIdx = new Map();
+    edges.forEach((e, idx) => edgeIdx.set(`${e.i},${e.j}`, idx));
+    const reducedCols = []; // parallel to triangles; each is Set<edgeIndex>
+    const piv = new Map(); // edge index -> triangle index
+    h1Pairs = [];
+
+    for (let t = 0; t < triangles.length; t++) {
+      const tri = triangles[t];
+      let col = new Set();
+      for (const [u,v] of [[tri.a, tri.b], [tri.a, tri.c], [tri.b, tri.c]]) {
+        const key = `${Math.min(u,v)},${Math.max(u,v)}`;
+        const eIdx = edgeIdx.get(key);
+        if (col.has(eIdx)) col.delete(eIdx); else col.add(eIdx);
+      }
+      // reduce
+      while (col.size > 0) {
+        let lo = -1;
+        for (const x of col) if (x > lo) lo = x;
+        if (piv.has(lo)) {
+          const other = reducedCols[piv.get(lo)];
+          for (const x of other) {
+            if (col.has(x)) col.delete(x); else col.add(x);
+          }
+        } else {
+          piv.set(lo, t);
+          reducedCols[t] = col;
+          h1Pairs.push({birth: edges[lo].d, death: tri.d});
+          break;
+        }
+      }
+      if (col.size === 0) reducedCols[t] = null;
+    }
+    h1Pairs = h1Pairs.filter(p => p.death > p.birth + 1e-9);
+  }
+
+  function render() {
+    const epsRaw = +epsEl.value;
+    const eps = (epsRaw / 100) * maxD * 1.05;
+    epsVal.textContent = eps.toFixed(2);
+
+    // ── point/edge/triangle SVG ──
+    svg.innerHTML = '';
+    // triangles
+    for (const t of triangles) {
+      if (t.d > eps) break;
+      const p0 = pts[t.a], p1 = pts[t.b], p2 = pts[t.c];
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      poly.setAttribute('points', `${p0[0]},${p0[1]} ${p1[0]},${p1[1]} ${p2[0]},${p2[1]}`);
+      poly.setAttribute('fill', 'var(--color-h1)');
+      poly.setAttribute('fill-opacity', '0.13');
+      svg.appendChild(poly);
+    }
+    // edges
+    for (const e of edges) {
+      if (e.d > eps) break;
+      const p0 = pts[e.i], p1 = pts[e.j];
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', p0[0]); line.setAttribute('y1', p0[1]);
+      line.setAttribute('x2', p1[0]); line.setAttribute('y2', p1[1]);
+      line.setAttribute('stroke', 'var(--color-h1)');
+      line.setAttribute('stroke-opacity', '0.45');
+      line.setAttribute('stroke-width', '1.2');
+      svg.appendChild(line);
+    }
+    // current eps circle around one anchor for scale reference (optional, omit to keep clean)
+    // points
+    for (let i = 0; i < pts.length; i++) {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', pts[i][0]); c.setAttribute('cy', pts[i][1]);
+      c.setAttribute('r', 4);
+      c.setAttribute('fill', 'var(--color-text-primary)');
+      svg.appendChild(c);
+    }
+
+    // ── persistence diagram SVG ──
+    pdSvg.innerHTML = '';
+    // axes
+    const axMax = maxD * 1.15;
+    function px(v) { return pad + (v / axMax) * (W - 2*pad); }
+    function py(v) { return H - pad - (v / axMax) * (H - 2*pad); }
+    // diagonal
+    const diag = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    diag.setAttribute('x1', px(0)); diag.setAttribute('y1', py(0));
+    diag.setAttribute('x2', px(axMax)); diag.setAttribute('y2', py(axMax));
+    diag.setAttribute('stroke', 'var(--color-border-tertiary)');
+    diag.setAttribute('stroke-dasharray', '3,3');
+    pdSvg.appendChild(diag);
+    // current eps line
+    const lineEps = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    lineEps.setAttribute('x1', px(eps)); lineEps.setAttribute('y1', py(0));
+    lineEps.setAttribute('x2', px(eps)); lineEps.setAttribute('y2', py(axMax));
+    lineEps.setAttribute('stroke', 'var(--color-text-tertiary)');
+    lineEps.setAttribute('stroke-dasharray', '2,4');
+    lineEps.setAttribute('stroke-width', '0.8');
+    pdSvg.appendChild(lineEps);
+    const lineEpsH = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    lineEpsH.setAttribute('x1', px(0)); lineEpsH.setAttribute('y1', py(eps));
+    lineEpsH.setAttribute('x2', px(axMax)); lineEpsH.setAttribute('y2', py(eps));
+    lineEpsH.setAttribute('stroke', 'var(--color-text-tertiary)');
+    lineEpsH.setAttribute('stroke-dasharray', '2,4');
+    lineEpsH.setAttribute('stroke-width', '0.8');
+    pdSvg.appendChild(lineEpsH);
+    // axes
+    const xax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    xax.setAttribute('x1', px(0)); xax.setAttribute('y1', py(0));
+    xax.setAttribute('x2', px(axMax)); xax.setAttribute('y2', py(0));
+    xax.setAttribute('stroke', 'var(--color-border-secondary)');
+    pdSvg.appendChild(xax);
+    const yax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    yax.setAttribute('x1', px(0)); yax.setAttribute('y1', py(0));
+    yax.setAttribute('x2', px(0)); yax.setAttribute('y2', py(axMax));
+    yax.setAttribute('stroke', 'var(--color-border-secondary)');
+    pdSvg.appendChild(yax);
+    // labels
+    const xlab = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    xlab.setAttribute('x', W/2); xlab.setAttribute('y', H - 6);
+    xlab.setAttribute('text-anchor', 'middle'); xlab.setAttribute('font-size', '11');
+    xlab.setAttribute('fill', 'var(--color-text-secondary)');
+    xlab.textContent = 'birth';
+    pdSvg.appendChild(xlab);
+    const ylab = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    ylab.setAttribute('x', 10); ylab.setAttribute('y', H/2);
+    ylab.setAttribute('text-anchor', 'middle'); ylab.setAttribute('font-size', '11');
+    ylab.setAttribute('fill', 'var(--color-text-secondary)');
+    ylab.setAttribute('transform', `rotate(-90 10 ${H/2})`);
+    ylab.textContent = 'death';
+    pdSvg.appendChild(ylab);
+
+    let aliveH0 = 0, aliveH1 = 0;
+    // H0 points
+    for (const p of h0Pairs) {
+      const death = isFinite(p.death) ? p.death : axMax;
+      const alive = death > eps;
+      if (alive) aliveH0++;
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', px(p.birth));
+      c.setAttribute('cy', py(death));
+      c.setAttribute('r', 3.6);
+      c.setAttribute('stroke', 'var(--color-h0)');
+      c.setAttribute('stroke-width', '1.3');
+      c.setAttribute('fill', alive ? 'var(--color-h0)' : 'none');
+      pdSvg.appendChild(c);
+    }
+    // H1 points
+    for (const p of h1Pairs) {
+      const death = isFinite(p.death) ? p.death : axMax;
+      if (p.birth > eps) continue; // hasn't been born yet
+      const alive = death > eps;
+      if (alive) aliveH1++;
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', px(p.birth));
+      c.setAttribute('cy', py(death));
+      c.setAttribute('r', 4.6);
+      c.setAttribute('stroke', 'var(--color-h1)');
+      c.setAttribute('stroke-width', '1.5');
+      c.setAttribute('fill', alive ? 'var(--color-h1)' : 'none');
+      pdSvg.appendChild(c);
+    }
+    b0El.textContent = aliveH0;
+    b1El.textContent = aliveH1;
+  }
+
+  let seed = 17;
+  function reload() {
+    pts = sampleAnnulus(seed);
+    buildComplexAndPersistence();
+    render();
+  }
+  resampleBtn.addEventListener('click', () => { seed = (seed * 31 + 7) | 0; reload(); });
+  epsEl.addEventListener('input', render);
+  reload();
+})();
+
+// ────────────────────────────────────────────────────────────────────────
+// Widget 2 — Boundary matrix reduction stepper
+// ────────────────────────────────────────────────────────────────────────
+(function(){
+  // Tiny complex: 5 points roughly on a square + center, all edges up to threshold,
+  // and a few triangles. We show only the H0 reduction here for visual simplicity.
+  const verts = ['v₀','v₁','v₂','v₃'];
+  // Edges sorted by length (filtration)
+  const edges = [
+    {name:'e₀', i:0, j:1, d:1.0},
+    {name:'e₁', i:1, j:2, d:1.0},
+    {name:'e₂', i:2, j:3, d:1.0},
+    {name:'e₃', i:0, j:3, d:1.0},
+    {name:'e₄', i:0, j:2, d:1.41},
+    {name:'e₅', i:1, j:3, d:1.41},
+  ];
+
+  // Build boundary matrix D (rows = verts, cols = edges) over F2.
+  const N = verts.length;
+  const E = edges.length;
+  function initD() {
+    const D = Array.from({length: N}, () => new Array(E).fill(0));
+    edges.forEach((e, j) => { D[e.i][j] = 1; D[e.j][j] = 1; });
+    return D;
+  }
+
+  // Compute reduction steps. For each column j (in order):
+  //   while col j is nonzero and its pivot row is taken by some col k<j, add col k to col j
+  //   record each addition as a separate step
+  function buildSteps() {
+    const D = initD();
+    const piv = new Map(); // row -> col
+    const steps = [];
+    steps.push({D: clone(D), narration: 'Initial boundary matrix D. Rows = vertices, columns = edges. D[i,j]=1 iff vᵢ is an endpoint of eⱼ.', highlight: null, pairs: []});
+    const pairs = [];
+    for (let j = 0; j < E; j++) {
+      while (true) {
+        // find lowest 1 in column j
+        let lo = -1;
+        for (let r = N-1; r >= 0; r--) if (D[r][j] === 1) { lo = r; break; }
+        if (lo === -1) {
+          steps.push({D: clone(D), narration: `Column ${edges[j].name} reduces to zero — this edge births an essential H₀ class.`, highlight: {col: j, row: -1}, pairs: [...pairs]});
+          break;
+        }
+        if (!piv.has(lo)) {
+          piv.set(lo, j);
+          pairs.push(`(${verts[lo]}, ${edges[j].name})  →  (0, ${edges[j].d.toFixed(2)})`);
+          steps.push({D: clone(D), narration: `Pivot of column ${edges[j].name} is row ${verts[lo]}, and that row is free. Pair: H₀ class born at vertex ${verts[lo]} (ε=0) dies at edge ${edges[j].name} (ε=${edges[j].d.toFixed(2)}).`, highlight: {col: j, row: lo}, pairs: [...pairs]});
+          break;
+        }
+        const k = piv.get(lo);
+        // add column k to column j over F2
+        for (let r = 0; r < N; r++) D[r][j] = (D[r][j] + D[r][k]) % 2;
+        steps.push({D: clone(D), narration: `Column ${edges[j].name} has pivot ${verts[lo]} but row ${verts[lo]} is already occupied by pivot of column ${edges[k].name}. Add column ${edges[k].name} to ${edges[j].name} mod 2.`, highlight: {col: j, row: lo, addedFrom: k}, pairs: [...pairs]});
+      }
+    }
+    return steps;
+  }
+  function clone(D) { return D.map(r => r.slice()); }
+
+  const steps = buildSteps();
+  let cur = 0;
+  const cxEl = document.getElementById('red-cx');
+  const matEl = document.getElementById('red-mat');
+  const pairsEl = document.getElementById('red-pairs');
+  const stepEl = document.getElementById('red-step');
+  const totalEl = document.getElementById('red-total');
+  const narrEl = document.getElementById('red-narr');
+  document.getElementById('red-total').textContent = steps.length;
+
+  function drawComplex(hi) {
+    cxEl.innerHTML = '';
+    const coords = [[60, 50], [200, 50], [200, 180], [60, 180]];
+    // draw all edges
+    edges.forEach((e, j) => {
+      const p0 = coords[e.i], p1 = coords[e.j];
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', p0[0]); line.setAttribute('y1', p0[1]);
+      line.setAttribute('x2', p1[0]); line.setAttribute('y2', p1[1]);
+      const isHi = hi && hi.col === j;
+      line.setAttribute('stroke', isHi ? 'var(--color-accent)' : 'var(--color-border-secondary)');
+      line.setAttribute('stroke-width', isHi ? '2.5' : '1.2');
+      cxEl.appendChild(line);
+      // label
+      const tx = (p0[0]+p1[0])/2, ty = (p0[1]+p1[1])/2;
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', tx + (p0[0]===p1[0] ? 8 : 0));
+      label.setAttribute('y', ty + (p0[1]===p1[1] ? -6 : 4));
+      label.setAttribute('font-size', '11');
+      label.setAttribute('fill', isHi ? 'var(--color-accent)' : 'var(--color-text-secondary)');
+      label.textContent = e.name;
+      cxEl.appendChild(label);
+    });
+    // vertices
+    coords.forEach((c, i) => {
+      const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circ.setAttribute('cx', c[0]); circ.setAttribute('cy', c[1]);
+      circ.setAttribute('r', 7);
+      const isHi = hi && hi.row === i;
+      circ.setAttribute('fill', isHi ? 'var(--color-accent)' : 'var(--color-text-primary)');
+      cxEl.appendChild(circ);
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', c[0]); t.setAttribute('y', c[1] - 12);
+      t.setAttribute('font-size', '12'); t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('fill', 'var(--color-text-secondary)');
+      t.textContent = verts[i];
+      cxEl.appendChild(t);
+    });
+  }
+
+  function drawMatrix(D, hi) {
+    let h = '<table><tr><th></th>';
+    edges.forEach(e => { h += `<th>${e.name}</th>`; });
+    h += '</tr>';
+    for (let r = 0; r < N; r++) {
+      h += `<tr><th>${verts[r]}</th>`;
+      for (let c = 0; c < E; c++) {
+        const v = D[r][c];
+        let cls = '';
+        if (hi && hi.col === c && hi.row === r) cls = 'pivot';
+        else if (hi && hi.col === c && v === 0 && hi.row >= 0 && r > hi.row) cls = 'killed';
+        h += `<td class="${cls}">${v}</td>`;
+      }
+      h += '</tr>';
+    }
+    h += '</table>';
+    matEl.innerHTML = h;
+  }
+
+  function update() {
+    const s = steps[cur];
+    drawComplex(s.highlight);
+    drawMatrix(s.D, s.highlight);
+    narrEl.textContent = s.narration;
+    stepEl.textContent = cur + 1;
+    pairsEl.innerHTML = s.pairs.length ? '<strong>persistence pairs so far:</strong><br>' + s.pairs.join('<br>') : '<span style="color:var(--color-text-tertiary);">no pairs emitted yet</span>';
+  }
+  document.getElementById('red-prev').addEventListener('click', () => { cur = Math.max(0, cur - 1); update(); });
+  document.getElementById('red-next').addEventListener('click', () => { cur = Math.min(steps.length - 1, cur + 1); update(); });
+  document.getElementById('red-reset').addEventListener('click', () => { cur = 0; update(); });
+  update();
+})();
+
+// ────────────────────────────────────────────────────────────────────────
+// Widget 3 — Ripser tricks budget bars
+// ────────────────────────────────────────────────────────────────────────
+(function(){
+  const svg = document.getElementById('bud-svg');
+  const info = document.getElementById('bud-info');
+  // Approximate counts for a 100-point Vietoris–Rips at full filtration.
+  // total simplices through dim 2: ~166,750 (100 + 4950 + 161,700) — we approximate.
+  const stages = [
+    {label: 'all simplices through dim 2',           count: 166750, color: 'var(--color-text-secondary)',
+     why: 'A 100-point complex has 100 vertices + 4,950 edges + 161,700 triangles. A naive reduction would touch every column.'},
+    {label: 'after cohomology duality',              count: 25000,  color: '#9ca3af',
+     why: 'Reducing the coboundary matrix δ instead of D drops the work dramatically: VR coboundaries are sparse because most edges have only a handful of cofacets that survive the threshold. Same persistence pairs come out.'},
+    {label: 'after clearing lemma',                  count: 8000,   color: '#6b7280',
+     why: 'Once a simplex is paired during the (k+1)-dim reduction, its column in the k-dim reduction must be zero — skip it. This removes most of the surviving columns at the lower dimension.'},
+    {label: 'after apparent-pairs filter',           count: 350,    color: 'var(--color-h1)',
+     why: 'A local O(k) check on each remaining simplex identifies pairs that the reduction would emit anyway. > 95% of pairs are caught here without any matrix work. What remains is the small "essential" tail that needs real reduction.'},
+  ];
+  const W = 720, H = 240, pad = 30;
+  const barH = 36, barGap = 12;
+  const maxC = stages[0].count;
+  const xScale = (c) => pad + Math.max(2, (c / maxC) * (W - 2*pad - 80));
+
+  let activeIdx = 0;
+  function render() {
+    svg.innerHTML = '';
+    stages.forEach((s, i) => {
+      const y = pad + i * (barH + barGap);
+      const w = xScale(s.count) - pad;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', pad); rect.setAttribute('y', y);
+      rect.setAttribute('width', w); rect.setAttribute('height', barH);
+      rect.setAttribute('fill', s.color);
+      rect.setAttribute('opacity', activeIdx === i ? '1' : '0.55');
+      rect.setAttribute('rx', '4');
+      rect.style.cursor = 'pointer';
+      rect.addEventListener('click', () => { activeIdx = i; render(); });
+      svg.appendChild(rect);
+      // label inside
+      const lab = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lab.setAttribute('x', pad + 8); lab.setAttribute('y', y + barH/2 + 4);
+      lab.setAttribute('font-size', '12');
+      lab.setAttribute('fill', 'white');
+      lab.style.pointerEvents = 'none';
+      lab.textContent = s.label;
+      svg.appendChild(lab);
+      // count on right
+      const cnt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      cnt.setAttribute('x', pad + w + 8); cnt.setAttribute('y', y + barH/2 + 4);
+      cnt.setAttribute('font-size', '12');
+      cnt.setAttribute('fill', 'var(--color-text-secondary)');
+      cnt.textContent = s.count.toLocaleString() + ' columns to touch';
+      svg.appendChild(cnt);
+    });
+    info.innerHTML = '<strong>' + stages[activeIdx].label + ':</strong> ' + stages[activeIdx].why;
+  }
+  render();
+})();
+
+// ────────────────────────────────────────────────────────────────────────
+// Widget 4 — Persistence image builder
+// ────────────────────────────────────────────────────────────────────────
+(function(){
+  // Synthetic diagram inspired by what a noisy annulus produces.
+  const diagram = [
+    {b: 0.0, p: 0.4},   // short H0
+    {b: 0.0, p: 0.5},
+    {b: 0.0, p: 0.6},
+    {b: 0.0, p: 0.7},
+    {b: 0.0, p: 0.55},
+    {b: 0.0, p: 0.45},
+    {b: 0.0, p: 0.5},
+    {b: 0.0, p: 4.5},   // long-lived essential H0 (the "global" cluster)
+    {b: 1.6, p: 3.2},   // long H1: the annulus hole
+    {b: 1.2, p: 0.3},   // short H1 noise
+    {b: 1.4, p: 0.2},
+    {b: 2.1, p: 0.4},
+  ];
+  const maxVal = 5.0;
+
+  const dgmSvg = document.getElementById('pi-dgm');
+  const canvas = document.getElementById('pi-img');
+  const ctx = canvas.getContext('2d');
+  const sigmaEl = document.getElementById('pi-sigma');
+  const sigmaVal = document.getElementById('pi-sigma-val');
+  const weightEl = document.getElementById('pi-weight');
+  const resEl = document.getElementById('pi-res');
+  const dimEl = document.getElementById('pi-dim');
+
+  function weight(p, mode) {
+    switch (mode) {
+      case 'p': return p;
+      case 'p2': return p * p;
+      case 'one': return 1;
+      case 'arctan': return Math.atan(p);
+    }
+  }
+
+  function renderDgm() {
+    dgmSvg.innerHTML = '';
+    const W = 280, H = 240, pad = 28;
+    const px = (b) => pad + (b / maxVal) * (W - 2*pad);
+    const py = (p) => H - pad - (p / maxVal) * (H - 2*pad);
+    // axes
+    const xax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    xax.setAttribute('x1', px(0)); xax.setAttribute('y1', py(0));
+    xax.setAttribute('x2', px(maxVal)); xax.setAttribute('y2', py(0));
+    xax.setAttribute('stroke', 'var(--color-border-secondary)');
+    dgmSvg.appendChild(xax);
+    const yax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    yax.setAttribute('x1', px(0)); yax.setAttribute('y1', py(0));
+    yax.setAttribute('x2', px(0)); yax.setAttribute('y2', py(maxVal));
+    yax.setAttribute('stroke', 'var(--color-border-secondary)');
+    dgmSvg.appendChild(yax);
+    // axis labels
+    const xl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    xl.setAttribute('x', W/2); xl.setAttribute('y', H-6);
+    xl.setAttribute('text-anchor', 'middle'); xl.setAttribute('font-size', '11');
+    xl.setAttribute('fill', 'var(--color-text-secondary)');
+    xl.textContent = 'birth b';
+    dgmSvg.appendChild(xl);
+    const yl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    yl.setAttribute('x', 8); yl.setAttribute('y', H/2);
+    yl.setAttribute('text-anchor', 'middle'); yl.setAttribute('font-size', '11');
+    yl.setAttribute('fill', 'var(--color-text-secondary)');
+    yl.setAttribute('transform', `rotate(-90 8 ${H/2})`);
+    yl.textContent = 'persistence p = d−b';
+    dgmSvg.appendChild(yl);
+    // points
+    for (const pt of diagram) {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', px(pt.b)); c.setAttribute('cy', py(pt.p));
+      c.setAttribute('r', 4);
+      c.setAttribute('fill', pt.b === 0 ? 'var(--color-h0)' : 'var(--color-h1)');
+      dgmSvg.appendChild(c);
+    }
+  }
+
+  function renderImg() {
+    const sigmaRaw = +sigmaEl.value;
+    const sigma = sigmaRaw / 20; // 0.1 .. 1.5
+    sigmaVal.textContent = sigma.toFixed(2);
+    const wMode = weightEl.value;
+    const res = +resEl.value;
+    dimEl.textContent = res * res;
+
+    // build image at given res
+    const grid = new Float64Array(res * res);
+    const dx = maxVal / (res - 1);
+    let maxv = 0;
+    for (const pt of diagram) {
+      if (pt.p < 1e-9) continue;
+      const w = weight(pt.p, wMode);
+      // outer-product trick
+      const gb = new Float64Array(res);
+      const gp = new Float64Array(res);
+      for (let k = 0; k < res; k++) {
+        const x = k * dx;
+        gb[k] = Math.exp(-((x - pt.b) ** 2) / (2 * sigma * sigma));
+        gp[k] = Math.exp(-((x - pt.p) ** 2) / (2 * sigma * sigma));
+      }
+      for (let j = 0; j < res; j++) {
+        const row = j * res;
+        const gpj = gp[j] * w;
+        for (let i = 0; i < res; i++) {
+          grid[row + i] += gb[i] * gpj;
+        }
+      }
+    }
+    for (let k = 0; k < grid.length; k++) if (grid[k] > maxv) maxv = grid[k];
+    if (maxv === 0) maxv = 1;
+
+    // render to canvas at fixed size; nearest-neighbour scaling via image-rendering:pixelated
+    canvas.width = res;
+    canvas.height = res;
+    canvas.style.width = '280px';
+    canvas.style.height = '240px';
+    const img = ctx.createImageData(res, res);
+    for (let j = 0; j < res; j++) {
+      for (let i = 0; i < res; i++) {
+        // flip vertically so persistence increases upward
+        const v = grid[(res - 1 - j) * res + i] / maxv;
+        const idx = (j * res + i) * 4;
+        // viridis-ish via simple ramp
+        const r = Math.round(255 * (0.05 + 0.85 * v));
+        const g = Math.round(255 * (0.10 + 0.45 * v));
+        const b = Math.round(255 * (0.20 + 0.30 * (1 - v) + 0.25 * v));
+        img.data[idx + 0] = r;
+        img.data[idx + 1] = g;
+        img.data[idx + 2] = b;
+        img.data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  sigmaEl.addEventListener('input', renderImg);
+  weightEl.addEventListener('change', renderImg);
+  resEl.addEventListener('change', renderImg);
+  renderDgm();
+  renderImg();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Core
+torch>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+pyyaml>=6.0
+
+# TDA (primary backend — strongly recommended)
+ripser>=0.6.0
+
+# Real PDBBind data (optional — not needed for synthetic mode)
+biopython>=1.81
+rdkit>=2023.3.1

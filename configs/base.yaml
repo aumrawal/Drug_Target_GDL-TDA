@@ -1,0 +1,27 @@
+# configs/base.yaml
+# TopoSurface-DTI base configuration
+
+# ── Data ──────────────────────────────────────────────────────────────────
+data_dir:        /kaggle/input/datasets/madukacharles/pdbbind-protein-ligand-binding-affinity-datasetT    # path to PDBBind dataset
+use_synthetic:   true            # true = synthetic data (no real data needed)
+n_train:         200
+n_val:           40
+
+# ── Model ─────────────────────────────────────────────────────────────────
+drug_in_features:    17          # N_ATOM_FEAT in molecule_graph.py
+pocket_in_features:  25          # N_RESIDUE_FEAT in pocket_mesh.py
+hidden_dim:          64          # encoder width for both drug and pocket
+tda_resolution:      20          # persistence image grid: 20×20 = 400 per H_k
+n_drug_interactions: 3           # depth of SchNet drug encoder
+
+# ── Training ──────────────────────────────────────────────────────────────
+n_epochs:      100
+lr:            1.0e-3
+weight_decay:  0.0
+
+# ── Notes ─────────────────────────────────────────────────────────────────
+# Total TDA feature dim = 2 (H₀ + H₁) × 400 × 2 (drug + pocket) = 1600
+# DrugEncoder:   ~30k parameters
+# PocketEncoder: ~120k parameters (GEM has more params due to irrep blocks)
+# FusionModule:  ~100k parameters
+# Total:         ~250k parameters
