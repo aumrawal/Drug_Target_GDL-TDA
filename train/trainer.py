@@ -51,10 +51,11 @@ def rmse(pred: torch.Tensor, target: torch.Tensor) -> float:
 # Forward step
 # ──────────────────────────────────────────────────────────────────────────
 
-def forward_step(model, sample, device, loss_fn) -> tuple:
+def forward_step(model, sample, device, loss_fn, target_mean: float = 0.0, target_std: float = 1.0) -> tuple:
     affinity = sample['affinity'].to(device)
+    affinity_norm = (affinity - target_mean) / target_std
 
-    pred = model(
+    pred_norm = model(
         drug_x        = sample['drug_x'].to(device),
         drug_pos      = sample['drug_pos'].to(device),
         drug_edge     = sample['drug_edge'].to(device),
@@ -66,7 +67,9 @@ def forward_step(model, sample, device, loss_fn) -> tuple:
         pocket_tda    = sample['pocket_tda'].to(device),
     )
 
-    loss = loss_fn(pred.unsqueeze(0), affinity.unsqueeze(0))
+    loss = loss_fn(pred_norm.unsqueeze(0), affinity_norm.unsqueeze(0))
+    # Denormalise for interpretable metric logging
+    pred = pred_norm.detach() * target_std + target_mean
     return pred, loss
 
 
@@ -74,20 +77,24 @@ def forward_step(model, sample, device, loss_fn) -> tuple:
 # Train / validate epochs
 # ──────────────────────────────────────────────────────────────────────────
 
-def train_epoch(model, loader, optimizer, device, loss_fn) -> Dict:
+def train_epoch(model, loader, optimizer, device, loss_fn, target_mean: float = 0.0, target_std: float = 1.0, accum_steps: int = 16) -> Dict:
     model.train()
     total_loss, preds, targets = 0.0, [], []
+    optimizer.zero_grad()
 
-    for sample in loader:
-        optimizer.zero_grad()
-        pred, loss = forward_step(model, sample, device, loss_fn)
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
+    for step, sample in enumerate(loader, 1):
+        pred, loss = forward_step(model, sample, device, loss_fn, target_mean, target_std)
+        # Scale loss so accumulated gradient equals the true mean over accum_steps
+        (loss / accum_steps).backward()
 
         total_loss += loss.item()
-        preds.append(pred.detach().cpu())
+        preds.append(pred.cpu())
         targets.append(sample['affinity'])
+
+        if step % accum_steps == 0 or step == len(loader):
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            optimizer.zero_grad()
 
     p = torch.stack(preds)
     t = torch.stack(targets)
@@ -95,12 +102,12 @@ def train_epoch(model, loader, optimizer, device, loss_fn) -> Dict:
 
 
 @torch.no_grad()
-def validate(model, loader, device, loss_fn) -> Dict:
+def validate(model, loader, device, loss_fn, target_mean: float = 0.0, target_std: float = 1.0) -> Dict:
     model.eval()
     total_loss, preds, targets = 0.0, [], []
 
     for sample in loader:
-        pred, loss = forward_step(model, sample, device, loss_fn)
+        pred, loss = forward_step(model, sample, device, loss_fn, target_mean, target_std)
         total_loss += loss.item()
         preds.append(pred.cpu())
         targets.append(sample['affinity'])
@@ -141,6 +148,14 @@ def train(cfg: dict, resume: Optional[str] = None):
     train_loader = DataLoader(train_ds, batch_size=1, shuffle=True,  collate_fn=collate_single)
     val_loader   = DataLoader(val_ds,   batch_size=1, shuffle=False, collate_fn=collate_single)
 
+    # Compute target statistics from training set for normalisation.
+    # All losses and metrics operate on normalised pKd; predictions are
+    # denormalised before RMSE/R reporting so values stay interpretable.
+    train_affinities = torch.tensor([train_ds[i]['affinity'].item() for i in range(len(train_ds))])
+    target_mean = float(train_affinities.mean())
+    target_std  = float(train_affinities.std().clamp(min=1e-3))
+    print(f"Target  mean={target_mean:.3f}  std={target_std:.3f}")
+
     model   = TopoSurfaceDTI.from_config(cfg).to(device)
     params  = model.count_parameters()
     print(f"Parameters: drug={params['drug_encoder']:,}  "
@@ -154,9 +169,9 @@ def train(cfg: dict, resume: Optional[str] = None):
         weight_decay=cfg.get('weight_decay', 0.0),
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=0.5, patience=10, min_lr=1e-5
+        optimizer, factor=0.5, patience=cfg.get('scheduler_patience', 30), min_lr=1e-5
     )
-    loss_fn = nn.HuberLoss(delta=1.0)
+    loss_fn = nn.MSELoss()
 
     start_epoch  = 0
     best_val_rmse = float('inf')
@@ -172,9 +187,11 @@ def train(cfg: dict, resume: Optional[str] = None):
 
     os.makedirs('checkpoints', exist_ok=True)
 
+    accum_steps = cfg.get('accum_steps', 16)
+
     for epoch in range(start_epoch, cfg.get('n_epochs', 100)):
-        tr = train_epoch(model, train_loader, optimizer, device, loss_fn)
-        va = validate(model, val_loader, device, loss_fn)
+        tr = train_epoch(model, train_loader, optimizer, device, loss_fn, target_mean, target_std, accum_steps)
+        va = validate(model, val_loader, device, loss_fn, target_mean, target_std)
         scheduler.step(va['loss'])
 
         print(
@@ -192,6 +209,8 @@ def train(cfg: dict, resume: Optional[str] = None):
                 'scheduler':     scheduler.state_dict(),
                 'best_val_rmse': best_val_rmse,
                 'cfg':           cfg,
+                'target_mean':   target_mean,
+                'target_std':    target_std,
             }, 'checkpoints/best_model.pt')
 
     print(f"\nTraining complete. Best Val RMSE: {best_val_rmse:.4f}")

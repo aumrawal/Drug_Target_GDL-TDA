@@ -1,0 +1,127 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.143
+           Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~/Desktop/Drug_target_GDL/notebooks
+
+❯ I have completed the training run but the model is just predicting the mean.  
+  I will share the image. Find out a list of causes and provide suggestions, do 
+   not make changes yet.[Image #1]                                              
+  ⎿  [Image #1]
+
+⏺ Let me read the key model and training files to identify causes.
+
+  Read 8 files, listed 1 directory (ctrl+o to expand)
+
+⏺ Now I have a complete picture. Here's the full diagnosis:
+
+  ---
+  Root Causes: Mean Prediction Collapse
+
+  1. Synthetic labels have no relationship to synthetic structures (dominant 
+  cause)
+
+  In data/dataset.py:72-76, affinities are drawn from rng.uniform(4, 12) using a
+   fixed RNG seeded at 42, while each sample's molecular graph is generated with
+   seed = index (dataset.py:97-99). There is zero mathematical relationship
+  between the generated atom features/positions and the affinity label. The
+  theoretically optimal strategy for any model trained on pure noise labels is
+  to predict the dataset mean — which is exactly what you see (R ≈ 0, flat
+  predictions ~5.7).
+
+  2. Final layer weight scaling creates a low-variance attractor
+
+  fusion.py:125-126 applies predictor[-1].weight.mul_(0.1) — shrinking output
+  weights by 10×. This makes the network's initial output nearly constant for
+  all inputs. With no learning signal (cause #1), gradients from Huber loss for
+  near-mean predictions are small and balanced (+/−), so there is no force
+  pulling the model away from this collapsed state.
+
+  3. Huber loss with δ=1 acts as L1 for large errors → predicts median, not mean
+
+  trainer.py:159 uses HuberLoss(delta=1.0). When predictions are near the mean
+  (~8) but targets span 4–12, most residuals exceed δ=1, putting the model in
+  the L1 regime where gradients are ±δ regardless of error magnitude. The
+  L1-optimal constant predictor is the median, not the mean — which may explain
+  why the model settled at ~5.7 rather than 8.0.
+
+  4. Pocket features include non-invariant absolute Cartesian coordinates
+
+  pocket_mesh.py:130: feat_list.append(np.array(aa + list(ca) + [dist], ...)) —
+  3 of the 25 residue features are raw xyz positions of Cα atoms. For synthetic
+  pockets, these are arbitrary numbers in a spherical shell with no consistent
+  frame. For real data, they break SE(3)-invariance. These features are noise in
+   both cases.
+
+  5. Batch size 1 with Huber loss produces very high gradient variance
+
+  trainer.py:141: batch_size=1. With a single sample per step, gradients flip
+  sign from step to step based on whether the current target is above or below
+  the current prediction. This discourages the model from developing any
+  directional bias away from the mean.
+
+  6. TDA features are near-uniform for random point clouds
+
+  data/tda_features.py: The TDA pipeline computes persistence images over random
+   atom positions (synthetic drug) and random spherical shell positions
+  (synthetic pocket). Random point clouds have uninformative, nearly identical
+  Betti curves — all persistence images will be dominated by a single H₀
+  component with no H₁ structure. The 1600-dimensional TDA input is effectively
+  constant noise.
+
+  7. ReduceLROnPlateau aggressively reduces LR before learning begins
+
+  trainer.py:156-158: patience=10. If validation loss plateaus (as it will
+  immediately under no-signal conditions), the LR is cut by 50% every 10 epochs.
+   By epoch 30–40, LR hits min_lr=1e-5, freezing the model near its initial
+  collapsed state permanently.
+
+  8. Training set is tiny (80 samples)
+
+  Even with real data and a real label-structure relationship, 80 training
+  samples is marginal for a ~250k parameter model with this architectural
+  complexity.
+
+  ---
+  Suggestions
+
+  ┌──────────┬───────────────────────────────────────────────────────────────┐
+  │ Priority │                              Fix                              │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │          │ For synthetic testing: make affinity a deterministic function │
+  │ Critical │  of the graph (e.g., sum of atom features, or a simple        │
+  │          │ function of positions) so there is an actual learnable signal │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ High     │ Normalize targets to zero mean, unit std before loss;         │
+  │          │ denormalize predictions at output                             │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ High     │ Increase batch size or use gradient accumulation (accumulate  │
+  │          │ 8–16 steps before optimizer.step) to reduce gradient variance │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ Medium   │ Switch to MSE loss while debugging (simpler gradient, easier  │
+  │          │ to diagnose)                                                  │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ Medium   │ Remove absolute Cartesian coordinates from pocket features;   │
+  │          │ use only relative distances or normalized coordinates         │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │ Medium   │ Increase patience in scheduler to 25–30, or switch to cosine  │
+  │          │ annealing                                                     │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │          │ Remove or reduce the final layer weight scaling — it helps at │
+  │ Medium   │  scale but here it creates an extra barrier to escaping the   │
+  │          │ constant-prediction basin                                     │
+  ├──────────┼───────────────────────────────────────────────────────────────┤
+  │          │ Add a simple baseline sanity check: can a linear model on     │
+  │ Low      │ mean-pooled atom features predict the (synthetic) affinity?   │
+  │          │ If not, the data generation is the problem                    │
+  └──────────┴───────────────────────────────────────────────────────────────┘
+
+  The single most impactful change: make the synthetic affinity a function of 
+  the structure, even an artificial one (e.g., affinity = 6 + mean(drug_x[:, 0])
+   * 4). If the model can learn that, the architecture is healthy and you can
+  move to real data.
+
+✻ Crunched for 1m 49s
+
+※ recap: Training a drug-target binding affinity model. The model collapses to predicting the mean because synthetic labels have no relationship to synthetic structures. Next: make the synthetic affinity a deterministic function of the molecular graph to create a real learning signal. (disable recaps in /config)
+
+❯ /exit                                                                         
+  ⎿  See ya!

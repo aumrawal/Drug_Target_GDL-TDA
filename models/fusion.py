@@ -121,9 +121,7 @@ class FusionModule(nn.Module):
             nn.Linear(hidden_dim // 2, 1),
         )
 
-        # Scale final layer for stable initialization
-        with torch.no_grad():
-            self.predictor[-1].weight.mul_(0.1)
+
 
     def forward(
         self,

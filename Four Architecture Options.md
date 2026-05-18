@@ -51,4 +51,4 @@
   Protein stream: AlphaFold2 surface + TDA → GEM pocket encoder (precomputed)                                                                                                                     
   Co-attention between drug/protein embeddings → binding prediction                                                                                                                               
                                                                                                                                                                                                   
-  Industry value: Virtual screening (millions of drugs against fixed targets), leverages precomputed protein GEM embeddings. 
+  Industry value: Virtual screening (millions of drugs against fixed targets), leverages precomputed protein GEM embeddings.

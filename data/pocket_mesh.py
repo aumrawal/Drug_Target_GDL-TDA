@@ -127,7 +127,10 @@ def extract_pocket_atoms(
         aa[AMINO_ACIDS.index(name) if name in AMINO_ACIDS else -1] = 1.0
 
         pos_list.append(ca)
-        feat_list.append(np.array(aa + list(ca) + [dist], dtype=np.float32))
+        # Use ligand-centroid-relative coords instead of absolute xyz — absolute
+        # coordinates break SE(3)-invariance across different crystal structures.
+        rel = (ca - lig_center) / cutoff_angstrom   # normalised, bounded ~[-1, 1]
+        feat_list.append(np.array(aa + list(rel) + [dist / cutoff_angstrom], dtype=np.float32))
 
     if len(pos_list) == 0:
         raise ValueError(f"No pocket residues found within {cutoff_angstrom}Å of ligand")
