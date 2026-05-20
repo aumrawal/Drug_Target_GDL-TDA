@@ -42,7 +42,8 @@ from train.trainer          import collate_single, forward_step, train
 # ─────────────────────────────────────────────────────────────────────────────
 
 @torch.no_grad()
-def run_inference(model, n_samples: int = 200, seed: int = 99) -> tuple:
+def run_inference(model, n_samples: int = 200, seed: int = 99,
+                  target_mean: float = 0.0, target_std: float = 1.0) -> tuple:
     """
     Run model over a synthetic evaluation set.
     Returns (preds, actuals) as numpy arrays.
@@ -54,11 +55,11 @@ def run_inference(model, n_samples: int = 200, seed: int = 99) -> tuple:
                         tda_resolution=model.tda_resolution)
     loader = DataLoader(ds, batch_size=1, shuffle=False, collate_fn=collate_single)
 
-    loss_fn = torch.nn.HuberLoss(delta=1.0)
+    loss_fn = torch.nn.MSELoss()
     preds, actuals = [], []
 
     for sample in loader:
-        pred, _ = forward_step(model, sample, device, loss_fn)
+        pred, _ = forward_step(model, sample, device, loss_fn, target_mean, target_std)
         preds.append(float(pred.cpu()))
         actuals.append(float(sample['affinity']))
 
@@ -279,6 +280,8 @@ def main():
     )
 
     # ── Load or train model ─────────────────────────────────────────────
+    target_mean, target_std = 0.0, 1.0   # defaults when no checkpoint stats exist
+
     if args.train_first or not os.path.exists(args.checkpoint):
         print('Training model on synthetic data first...')
         import yaml
@@ -291,12 +294,15 @@ def main():
         cfg   = ckpt.get('cfg', {})
         model = TopoSurfaceDTI.from_config(cfg).to(device)
         model.load_state_dict(ckpt['model'])
+        target_mean = ckpt.get('target_mean', 0.0)
+        target_std  = ckpt.get('target_std',  1.0)
         print(f'Loaded checkpoint from epoch {ckpt["epoch"]}  '
               f'(val RMSE = {ckpt.get("best_val_rmse", "?"):.4f})')
 
     # ── Run inference ───────────────────────────────────────────────────
     print(f'\nRunning inference on {args.n_samples} synthetic samples...')
-    preds, actuals = run_inference(model, n_samples=args.n_samples)
+    preds, actuals = run_inference(model, n_samples=args.n_samples,
+                                   target_mean=target_mean, target_std=target_std)
 
     # ── Plot ────────────────────────────────────────────────────────────
     make_figure(preds, actuals, save_path=args.output)

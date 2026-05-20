@@ -40,7 +40,7 @@ class CrossAttention(nn.Module):
     output : (Q, dim)  — same shape as query
     """
 
-    def __init__(self, dim: int, n_heads: int = 4):
+    def __init__(self, dim: int, n_heads: int = 4, attn_drop: float = 0.2):
         super().__init__()
         assert dim % n_heads == 0, f"dim={dim} must be divisible by n_heads={n_heads}"
         self.n_heads  = n_heads
@@ -52,6 +52,7 @@ class CrossAttention(nn.Module):
         self.v_proj   = nn.Linear(dim, dim)
         self.out_proj = nn.Linear(dim, dim)
         self.norm     = nn.LayerNorm(dim)
+        self.attn_drop = nn.Dropout(attn_drop)
 
     def forward(self, query: Tensor, context: Tensor) -> Tensor:
         Q = query.shape[0]
@@ -64,7 +65,7 @@ class CrossAttention(nn.Module):
         k = split(self.k_proj(context))    # (H, K, d)
         v = split(self.v_proj(context))    # (H, K, d)
 
-        attn = F.softmax(torch.bmm(q, k.transpose(-2, -1)) * self.scale, dim=-1)
+        attn = self.attn_drop(F.softmax(torch.bmm(q, k.transpose(-2, -1)) * self.scale, dim=-1))
         out  = torch.bmm(attn, v)                                   # (H, Q, d)
         out  = out.transpose(0, 1).contiguous().view(Q, -1)         # (Q, dim)
         return self.norm(query + self.out_proj(out))
@@ -106,6 +107,7 @@ class FusionModule(nn.Module):
         self.tda_compress = nn.Sequential(
             nn.Linear(tda_dim, hidden_dim // 2),
             nn.SiLU(),
+            nn.Dropout(0.3),
             nn.Linear(hidden_dim // 2, tda_hidden),
         )
 
@@ -115,9 +117,10 @@ class FusionModule(nn.Module):
         self.predictor = nn.Sequential(
             nn.Linear(predictor_in, hidden_dim),
             nn.SiLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.35),
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.SiLU(),
+            nn.Dropout(0.2),
             nn.Linear(hidden_dim // 2, 1),
         )
 

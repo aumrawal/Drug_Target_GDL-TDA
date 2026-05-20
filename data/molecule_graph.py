@@ -60,7 +60,14 @@ def _bond_features(bond, pos_i: np.ndarray, pos_j: np.ndarray) -> np.ndarray:
 
 
 def mol_to_graph(mol) -> Dict[str, Tensor]:
-    """Convert an RDKit molecule with 3D conformer to a graph dict."""
+    """Convert an RDKit molecule to a graph dict. Generates a 3D conformer if none exists."""
+    if mol.GetNumConformers() == 0:
+        from rdkit.Chem import AllChem
+        mol = AllChem.AddHs(mol)
+        AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+        AllChem.MMFFOptimizeMolecule(mol)
+        from rdkit import Chem
+        mol = Chem.RemoveHs(mol)
     conf = mol.GetConformer()
     pos  = np.array([list(conf.GetAtomPosition(i))
                      for i in range(mol.GetNumAtoms())], dtype=np.float32)

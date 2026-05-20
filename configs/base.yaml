@@ -17,7 +17,7 @@ n_drug_interactions: 3           # depth of SchNet drug encoder
 # ── Training ──────────────────────────────────────────────────────────────
 n_epochs:      100
 lr:            1.0e-3
-weight_decay:  0.0
+weight_decay:  1.0e-3
 
 # ── Notes ─────────────────────────────────────────────────────────────────
 # Total TDA feature dim = 2 (H₀ + H₁) × 400 × 2 (drug + pocket) = 1600
