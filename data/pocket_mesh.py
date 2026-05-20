@@ -89,22 +89,25 @@ def extract_pocket_atoms(
         except ImportError:
             raise ImportError("Install RDKit: pip install rdkit-pypi")
         RDLogger.DisableLog('rdApp.*')
-        mol = Chem.SDMolSupplier(sdf_path, removeHs=True)[0]
-        if mol is None:
-            mol = Chem.SDMolSupplier(sdf_path, removeHs=True, sanitize=False)[0]
-            if mol is not None:
-                try:
-                    Chem.SanitizeMol(mol)
-                except Exception:
-                    # Skip valence checks; ring/aromaticity info still valid
-                    Chem.SanitizeMol(
-                        mol,
-                        Chem.SanitizeFlags.SANITIZE_ALL
-                        ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES,
-                    )
+        if sdf_path.endswith('.mol2'):
+            mol = Chem.MolFromMol2File(sdf_path, removeHs=True)
+        else:
+            mol = Chem.SDMolSupplier(sdf_path, removeHs=True)[0]
+            if mol is None:
+                mol = Chem.SDMolSupplier(sdf_path, removeHs=True, sanitize=False)[0]
+                if mol is not None:
+                    try:
+                        Chem.SanitizeMol(mol)
+                    except Exception:
+                        # Skip valence checks; ring/aromaticity info still valid
+                        Chem.SanitizeMol(
+                            mol,
+                            Chem.SanitizeFlags.SANITIZE_ALL
+                            ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES,
+                        )
         RDLogger.EnableLog('rdApp.*')
         if mol is None:
-            raise ValueError(f"Could not parse ligand SDF: {sdf_path}")
+            raise ValueError(f"Could not parse ligand file: {sdf_path}")
         conf = mol.GetConformer()
         ligand_coords = [
             list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())

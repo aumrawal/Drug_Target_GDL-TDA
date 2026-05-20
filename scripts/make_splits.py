@@ -18,8 +18,10 @@ def find_index_file(data_dir: str) -> str | None:
     """Search for the PDBBind index file in data_dir using several glob patterns."""
     patterns = [
         "*.csv",
+        "INDEX_*.lst",
         "INDEX_*.txt",
         "INDEX_*",
+        "*.lst",
         "*.txt",
         "*index*",
         "*INDEX*",
@@ -57,60 +59,82 @@ def _find_id_col(headers: list[str]) -> int | None:
     return None
 
 
+def _pkd_after_year(cols: list[str]) -> "float | None":
+    """
+    Scan a list of string tokens and return the first float that comes
+    after a 4-digit release-year token (1970-2030).
+    Falls back to returning the first float in the list if no year is found.
+    """
+    year_found = False
+    first_float = None
+    for val in cols:
+        try:
+            v = float(val)
+            if first_float is None:
+                first_float = v
+            if year_found:
+                return v          # first float after the year → pKd
+        except ValueError:
+            pass
+        if not year_found:
+            try:
+                yr = int(val)
+                if 1970 <= yr <= 2030:
+                    year_found = True
+            except ValueError:
+                pass
+    return first_float            # best-effort if no year column found
+
+
 def parse_index_file(index_path: str) -> list[dict]:
     """
-    Parse a PDBBind index/affinity file — handles both CSV and whitespace formats.
+    Parse a PDBBind index/affinity file.
 
-    CSV format (with headers):
-        PDB ID column is auto-detected by name (pdb, pdbid, code, id, ...)
-        Affinity column is auto-detected by name (pkd, affinity, -logKd, ...)
+    Supports:
+      • Classic PDBbind whitespace format  (col0=PDB, col2=year, col3=pKd)
+      • Tab-separated without headers
+      • CSV with named headers (pdb/id col + pkd/affinity col auto-detected)
+      • CSV without headers (col0=PDB ID, pKd found after year column)
 
-    Classic whitespace format:
-        1a1e    2.00  2003  6.92  Kd=1.20nM  ...
-        col 0 = PDB ID,  col 3 = pKd float
+    Format is detected from the FIRST NON-COMMENT data line, not from the
+    file extension or the first line (which is usually a comment block).
     """
     import csv as csv_mod
 
     entries = []
     skipped = 0
 
-    with open(index_path, "r") as fh:
+    with open(index_path, "r", errors="replace") as fh:
         raw = fh.read()
 
-    is_csv = index_path.endswith(".csv") or ("," in raw.split("\n")[0])
+    # Find first non-comment data line — use THIS to detect the delimiter.
+    first_data = next(
+        (l.strip() for l in raw.splitlines()
+         if l.strip() and not l.strip().startswith("#")),
+        ""
+    )
+    print(f"  First data line: {first_data[:120]}")
 
-    if is_csv:
-        reader = csv_mod.DictReader(raw.splitlines())
-        headers = reader.fieldnames or []
-        print(f"  CSV headers detected: {list(headers)}")
+    has_comma = "," in first_data
+    has_tab   = "\t" in first_data
 
-        id_col  = _find_id_col(list(headers))
-        aff_col = _find_affinity_col(list(headers))
+    # ── CSV / TSV path ────────────────────────────────────────────────────
+    if has_comma or has_tab or index_path.endswith(".csv"):
+        delim = "," if (has_comma or index_path.endswith(".csv")) else "\t"
 
-        if id_col is None or aff_col is None:
-            # Fall back: col 0 = id, try every column for a float affinity
-            print("  [warn] Could not auto-detect id/affinity columns by name.")
-            print("  Falling back: column 0 = PDB ID, scanning for first numeric column.")
-            for row in csv_mod.reader(raw.splitlines()):
-                if not row or row[0].startswith("#"):
-                    continue
-                pdbid = row[0].strip().lower()
-                # find first numeric value after col 0
-                pkd = None
-                for val in row[1:]:
-                    try:
-                        pkd = float(val.strip())
-                        break
-                    except ValueError:
-                        continue
-                if pkd is None:
-                    skipped += 1
-                    continue
-                entries.append({"id": pdbid, "affinity": pkd})
-        else:
-            id_name  = list(headers)[id_col]
-            aff_name = list(headers)[aff_col]
-            print(f"  Using id column='{id_name}', affinity column='{aff_name}'")
+        # Strip comment lines, then try DictReader to detect named headers.
+        data_lines = [l for l in raw.splitlines() if not l.strip().startswith("#")]
+        reader  = csv_mod.DictReader(data_lines, delimiter=delim)
+        headers = list(reader.fieldnames or [])
+        print(f"  Delimiter={delim!r}, candidate headers: {headers}")
+
+        id_col  = _find_id_col(headers)
+        aff_col = _find_affinity_col(headers)
+
+        if id_col is not None and aff_col is not None:
+            id_name  = headers[id_col]
+            aff_name = headers[aff_col]
+            print(f"  Using id='{id_name}', affinity='{aff_name}'")
             for row in reader:
                 pdbid = row[id_name].strip().lower()
                 try:
@@ -119,24 +143,39 @@ def parse_index_file(index_path: str) -> list[dict]:
                     skipped += 1
                     continue
                 entries.append({"id": pdbid, "affinity": pkd})
+        else:
+            # No recognisable headers — parse manually:
+            # col 0 = PDB ID, pKd found after a year token.
+            print("  No named headers found; parsing col[0]=PDB ID, pKd by year column.")
+            for line in data_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                cols = [c.strip() for c in line.split(delim)]
+                if not cols or len(cols[0]) != 4:
+                    skipped += 1
+                    continue
+                pkd = _pkd_after_year(cols[1:])
+                if pkd is None:
+                    skipped += 1
+                    continue
+                entries.append({"id": cols[0].lower(), "affinity": pkd})
 
+    # ── Whitespace path ───────────────────────────────────────────────────
     else:
-        # Classic whitespace-separated INDEX file
         for line in raw.splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             cols = line.split()
-            if len(cols) < 4:
+            if len(cols) < 2 or len(cols[0]) != 4:
                 skipped += 1
                 continue
-            pdbid = cols[0].lower()
-            try:
-                pkd = float(cols[3])
-            except ValueError:
+            pkd = _pkd_after_year(cols[1:])
+            if pkd is None:
                 skipped += 1
                 continue
-            entries.append({"id": pdbid, "affinity": pkd})
+            entries.append({"id": cols[0].lower(), "affinity": pkd})
 
     if skipped:
         print(f"  [info] Skipped {skipped} malformed/unparseable lines.")
@@ -145,13 +184,14 @@ def parse_index_file(index_path: str) -> list[dict]:
 
 
 def verify_files(entries: list[dict], data_dir: str) -> list[dict]:
-    """Keep only entries where both _protein.pdb and _ligand.sdf exist."""
+    """Keep only entries where _protein.pdb and a ligand file (.sdf or .mol2) exist."""
     valid = []
     for e in entries:
         pid = e["id"]
-        pdb_path = os.path.join(data_dir, pid, f"{pid}_protein.pdb")
-        sdf_path = os.path.join(data_dir, pid, f"{pid}_ligand.sdf")
-        if os.path.isfile(pdb_path) and os.path.isfile(sdf_path):
+        pdb_path  = os.path.join(data_dir, pid, f"{pid}_protein.pdb")
+        sdf_path  = os.path.join(data_dir, pid, f"{pid}_ligand.sdf")
+        mol2_path = os.path.join(data_dir, pid, f"{pid}_ligand.mol2")
+        if os.path.isfile(pdb_path) and (os.path.isfile(sdf_path) or os.path.isfile(mol2_path)):
             valid.append(e)
     return valid
 
@@ -176,6 +216,18 @@ def split_entries(entries: list[dict], seed: int = 42) -> tuple[list, list, list
 def save_split(entries: list[dict], path: str) -> None:
     with open(path, "w") as fh:
         json.dump(entries, fh, indent=2)
+
+
+def _entries_from_dirs(data_dir: str) -> list[dict]:
+    """Fallback: build an entry list from PDB ID sub-directories with affinity=0.0."""
+    entries = []
+    try:
+        for name in sorted(os.listdir(data_dir)):
+            if len(name) == 4 and name.isalnum():
+                entries.append({"id": name.lower(), "affinity": 0.0})
+    except OSError:
+        pass
+    return entries
 
 
 def main() -> None:
@@ -218,43 +270,50 @@ def main() -> None:
     # -- Locate index file -------------------------------------------------
     index_path = args.index_file if args.index_file else find_index_file(data_dir)
     if index_path is None:
-        print("ERROR: No index file found in data_dir.\n")
-        print("Files and directories found at that path:")
-        try:
-            all_entries = sorted(os.listdir(data_dir))
-            files = [e for e in all_entries if os.path.isfile(os.path.join(data_dir, e))]
-            dirs  = [e for e in all_entries if os.path.isdir(os.path.join(data_dir, e))]
-            if files:
-                print("  Files:")
-                for f in files:
-                    print(f"    {f}")
-            else:
-                print("  (no files at top level — only subdirectories)")
-            print(f"  Directories ({len(dirs)} total, first 10 shown):")
-            for d in dirs[:10]:
-                print(f"    {d}/")
-        except Exception as exc:
-            print(f"  (could not list directory: {exc})")
-        print(
-            "\nRe-run with --index_file pointing directly to the index/affinity file, e.g.:\n"
-            "  python scripts/make_splits.py --index_file /path/to/affinity_data.csv"
-        )
-        sys.exit(1)
+        print("WARNING: No affinity index file found — falling back to directory scan.")
+        print("         Affinities will be set to 0.0. Metrics won't be meaningful")
+        print("         until real pKd values are supplied via --index_file.\n")
+        entries = _entries_from_dirs(data_dir)
+        if not entries:
+            print(
+                "ERROR: data_dir contains no 4-char alphanumeric subdirectories "
+                "that look like PDB IDs. Check --data_dir."
+            )
+            sys.exit(1)
+        print(f"  Found {len(entries)} PDB ID directories in data_dir.")
+        valid = verify_files(entries, data_dir)
+        missing = len(entries) - len(valid)
+        print(f"  Valid (protein.pdb + ligand file present): {len(valid)}")
+        if missing:
+            print(f"  Dropped {missing} entries with missing structure files.")
+        if not valid:
+            print("ERROR: No entries have _protein.pdb + _ligand.sdf/.mol2. Check data_dir.")
+            sys.exit(1)
+        train, val, test = split_entries(valid, seed=42)
+        os.makedirs(out_dir, exist_ok=True)
+        save_split(train, os.path.join(out_dir, "train_split.json"))
+        save_split(val,   os.path.join(out_dir, "val_split.json"))
+        save_split(test,  os.path.join(out_dir, "test_split.json"))
+        print(f"\n  Train: {len(train)}  Val: {len(val)}  Test: {len(test)}")
+        print("Done (no affinity index — placeholder affinities used).")
+        sys.exit(0)
 
     print(f"Found index file: {index_path}")
 
-    # Print the first 3 non-empty lines (including comments) so the user can
-    # verify we picked the right file.
-    print("\nFirst 3 lines of index file:")
+    # Print the first comment block AND the first 3 actual data lines.
+    print("\nFirst data lines of index file:")
     with open(index_path, "r") as fh:
-        count = 0
+        data_count = 0
         for line in fh:
             stripped = line.rstrip()
-            if stripped:
-                print(f"  {stripped}")
-                count += 1
-                if count >= 3:
-                    break
+            if not stripped:
+                continue
+            is_comment = stripped.lstrip().startswith("#")
+            print(f"  {'#' if is_comment else '>'} {stripped}")
+            if not is_comment:
+                data_count += 1
+            if data_count >= 3:
+                break
     print()
 
     # -- Parse index -------------------------------------------------------
