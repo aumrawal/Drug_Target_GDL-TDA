@@ -180,6 +180,38 @@ def parse_index_file(index_path: str) -> list[dict]:
     if skipped:
         print(f"  [info] Skipped {skipped} malformed/unparseable lines.")
 
+    # ── Sanity check: pKd values must be in [0, 20]. ─────────────────────
+    # If the mean is >> 20 the parser grabbed raw Kd/Ki values (nM, pM, …)
+    # instead of −log₁₀(Kd). Try known unit offsets until the mean lands in
+    # the chemically reasonable pKd window [4, 12].
+    if entries:
+        import math
+        mean_aff = sum(e["affinity"] for e in entries) / len(entries)
+        print(f"  Parsed affinity mean = {mean_aff:.4f}")
+
+        if mean_aff > 20:
+            print(f"  WARNING: mean {mean_aff:.1f} >> 20 — looks like raw Kd/Ki, not pKd.")
+            print("  Trying unit conversions  (pKd = factor − log10(value)):")
+            # pKd = −log10(Kd_M) = factor − log10(Kd_unit)
+            # fM→15, pM→12, nM→9, μM→6, mM→3
+            conversions = [("fM", 15), ("pM", 12), ("nM", 9), ("µM", 6), ("mM", 3)]
+            best = None
+            for unit, factor in conversions:
+                converted_mean = factor - math.log10(max(mean_aff, 1e-9))
+                print(f"    {unit}: mean pKd = {converted_mean:.2f}")
+                if best is None and 4.0 <= converted_mean <= 12.0:
+                    best = (unit, factor, converted_mean)
+            if best:
+                unit, factor, new_mean = best
+                print(f"  Applying: pKd = {factor} − log10(value)  [assuming {unit}]")
+                for e in entries:
+                    raw = max(e["affinity"], 1e-9)
+                    e["affinity"] = round(factor - math.log10(raw), 4)
+                print(f"  Converted mean pKd = {new_mean:.2f}")
+            else:
+                print("  Could not find a unit that gives a sane pKd — keeping raw values.")
+                print("  Pass --index_file pointing to a file with −logKd/Ki values.")
+
     return entries
 
 
